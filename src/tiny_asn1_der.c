@@ -249,7 +249,6 @@ int tiny_asn1_read_tlv(const unsigned char **p, const unsigned char *end,
                        tiny_asn1_tlv *tlv)
 {
     const unsigned char *cur;
-    const unsigned char *len_ptr;
     size_t len;
     size_t i;
     unsigned char len_octets;
@@ -269,7 +268,6 @@ int tiny_asn1_read_tlv(const unsigned char **p, const unsigned char *end,
         return TINY_ASN1_ERR_INVALID_LEN;
     }
 
-    len_ptr = cur;
     if ((*cur & 0x80U) == 0U) {
         len = (size_t) *cur++;
     } else {
@@ -278,9 +276,18 @@ int tiny_asn1_read_tlv(const unsigned char **p, const unsigned char *end,
         if (len_octets == 0U || len_octets > sizeof(size_t) || (size_t) (end - cur) < len_octets) {
             return TINY_ASN1_ERR_INVALID_LEN;
         }
+        if (len_octets > 1U && cur[0] == 0U) {
+            return TINY_ASN1_ERR_INVALID_LEN;
+        }
         len = 0U;
         for (i = 0; i < len_octets; ++i) {
+            if (len > (((size_t) -1) >> 8U)) {
+                return TINY_ASN1_ERR_INVALID_LEN;
+            }
             len = (len << 8U) | cur[i];
+        }
+        if (len < 128U) {
+            return TINY_ASN1_ERR_INVALID_LEN;
         }
         cur += len_octets;
     }
@@ -293,7 +300,6 @@ int tiny_asn1_read_tlv(const unsigned char **p, const unsigned char *end,
     tlv->value_len = len;
     tlv->encoded_len = (size_t) (cur + len - tlv->ptr);
     *p = cur + len;
-    (void) len_ptr;
     return 0;
 }
 
@@ -348,6 +354,14 @@ int tiny_asn1_get_int(const unsigned char **p, const unsigned char *end, int *va
     }
     if (tlv.value_len == 0U || tlv.value_len > sizeof(int) + 1U) {
         return TINY_ASN1_ERR_INVALID_VALUE;
+    }
+    if (tlv.value_len > 1U) {
+        if (tlv.value[0] == 0x00U && (tlv.value[1] & 0x80U) == 0U) {
+            return TINY_ASN1_ERR_INVALID_VALUE;
+        }
+        if (tlv.value[0] == 0xFFU && (tlv.value[1] & 0x80U) != 0U) {
+            return TINY_ASN1_ERR_INVALID_VALUE;
+        }
     }
 
     negative = (tlv.value[0] & 0x80U) != 0U;

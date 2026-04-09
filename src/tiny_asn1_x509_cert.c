@@ -230,6 +230,9 @@ int tiny_asn1_x509_get_subject_key_identifier(const unsigned char *cert_der,
         if (ret != 0) {
             return ret;
         }
+        if (ext_p != ext_end) {
+            return TINY_ASN1_ERR_SYNTAX;
+        }
 
         if (tiny_asn1_oid_equals(&oid,
                                  OID_SUBJECT_KEY_IDENTIFIER,
@@ -242,6 +245,9 @@ int tiny_asn1_x509_get_subject_key_identifier(const unsigned char *cert_der,
                                        TINY_ASN1_TAG_OCTET_STRING, &ski);
             if (ret != 0) {
                 return ret;
+            }
+            if (wrapped != extn_value.value + extn_value.value_len) {
+                return TINY_ASN1_ERR_SYNTAX;
             }
 
             *key_id = ski.value;

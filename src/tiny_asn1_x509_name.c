@@ -119,6 +119,54 @@ static int tiny_asn1_ascii_casecmp(const char *left, const char *right)
     return (int) (unsigned char) *left - (int) (unsigned char) *right;
 }
 
+static int tiny_asn1_is_printable_char(unsigned char ch)
+{
+    if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
+        (ch >= '0' && ch <= '9')) {
+        return 1;
+    }
+
+    switch (ch) {
+        case ' ':
+        case '\'':
+        case '(':
+        case ')':
+        case '+':
+        case ',':
+        case '-':
+        case '.':
+        case '/':
+        case ':':
+        case '=':
+        case '?':
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+static int tiny_asn1_validate_attr_value(const tiny_asn1_name_attr *attr,
+                                         const char *value)
+{
+    const unsigned char *cur;
+
+    if (attr == NULL || value == NULL) {
+        return TINY_ASN1_ERR_PARAM;
+    }
+
+    for (cur = (const unsigned char *) value; *cur != '\0'; ++cur) {
+        if (attr->value_tag == TINY_ASN1_TAG_PRINTABLE_STRING &&
+            !tiny_asn1_is_printable_char(*cur)) {
+            return TINY_ASN1_ERR_INVALID_VALUE;
+        }
+        if (attr->value_tag == TINY_ASN1_TAG_IA5_STRING && *cur > 0x7FU) {
+            return TINY_ASN1_ERR_INVALID_VALUE;
+        }
+    }
+
+    return 0;
+}
+
 static void tiny_asn1_trim_span(const char **begin, const char **end)
 {
     while (*begin < *end && isspace((unsigned char) **begin)) {
@@ -233,6 +281,12 @@ static int tiny_asn1_parse_rdn(const char *segment_begin, const char *segment_en
 
     ret = tiny_asn1_dup_unescaped(value_begin, value_end, &rdn->value);
     if (ret != 0) {
+        return ret;
+    }
+    ret = tiny_asn1_validate_attr_value(rdn->attr, rdn->value);
+    if (ret != 0) {
+        free(rdn->value);
+        rdn->value = NULL;
         return ret;
     }
     if (rdn->attr->value_tag == TINY_ASN1_TAG_PRINTABLE_STRING &&
